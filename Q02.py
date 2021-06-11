@@ -49,7 +49,6 @@ def normalizacao01_Y(dados):
         dados_norm[x] = (dados[x] - zero) / (um - zero)
     return dados_norm
 
-
 #normalizando os conjuntos de treinamento e validacao
 #set_validation_norm = normalizacao01(set_validation)
 
@@ -72,6 +71,10 @@ x_train_norm = np.c_[np.ones((x_train_norm.shape[0])), x_train_norm[:, :12]]
 y_validation = set_validation[:,13]
 x_validation = np.c_[np.ones((set_validation.shape[0])), set_validation[:, :12]]
 
+y_valid_norm = normalizacao01_Y(set_validation[:,13])
+x_valid_norm = normalizacao01_X(set_validation[:, :12])
+x_valid_norm = np.c_[np.ones((x_valid_norm.shape[0])), x_valid_norm[:, :12]]
+
 #pred_valid = x_validation @ W
 
 #rmse_valid = np.sqrt(np.mean(((y_validation - pred_valid) ** 2)))
@@ -79,76 +82,98 @@ x_validation = np.c_[np.ones((set_validation.shape[0])), set_validation[:, :12]]
 
 #print(f"RMSE = {rmse_valid} e MRE = {mre_valid}")
 
+## Variáveis globais para todos os casos
+num_epochs = 600
+alpha =  0.001
+lambda_ = 0# .01 #refazer com 0.01 - letra D
 
 #GD grau 1
-num_epochs = 100
-alpha =  0.01
-
-axis_x = []
-for x in range(num_epochs):
-    axis_x.append(x+1)
-
 new_x_train_norm = x_train_norm
 new_x_valid = x_validation
-W = np.random.random(new_x_train_norm.shape[1])
+W = np.random.rand(new_x_train_norm.shape[1])
 epoch = 0
 MSE = []
+MSE_valid = []
 while epoch < num_epochs:
     MSE.append(0)
+    MSE_valid.append(0) 
     Y = new_x_train_norm @ W
     erros = y_train_norm - Y
-    MSE[epoch] = (MSE[epoch] + erros**2) / (2*new_x_train_norm.shape[0])
-    W = W + alpha * np.sum(erros.reshape(1,new_x_train_norm.shape[0]) @ 
-                           new_x_train_norm ) / new_x_train_norm.shape[0]
+    #print(f"Soma dos Erros: {np.sum(erros)}")
+    MSE[epoch] = np.sum((MSE[epoch] + erros**2) / (2*new_x_train_norm.shape[0]))
+    #print(f"MSE: {np.sum(MSE)}")
+        
+    pred = x_valid_norm @ W
+    erro_valid = y_valid_norm - pred
+    MSE_valid[epoch] = np.sum((MSE_valid[epoch] + erro_valid**2) / (2*x_valid_norm.shape[0]))
+        
+    W = W + (alpha * (np.sum(new_x_train_norm.T @ erros) / new_x_train_norm.shape[0])) - lambda_ * W # Reg L2
+    
     epoch = epoch + 1
+    #fim do while
 
 fig2, ax2 = plt.subplots()
-ax2.plot(axis_x, np.sqrt(MSE), color='tab:blue')
-ax2.set_title(f"RMSE")
+ax2.plot(np.arange(1,num_epochs+1), MSE, color='tab:blue', label='Treino')
+ax2.plot(np.arange(1,num_epochs+1), MSE_valid, color='tab:red', label='Teste')
+ax2.set_title(f"MSE Para Grau 1")
 plt.show()
-print(f"MSE = {np.sqrt(np.sum(MSE))}")
-pred = new_x_valid @ W
-fig, ax = plt.subplots()
-ax.plot(new_x_valid, pred, color='tab:blue')
-ax.plot(new_x_valid, y_validation, 'o', color='tab:red')
-ax.set_title(f"Grafico em N={N}")
-plt.show()
+print(f"MSE = {np.sqrt(np.mean(MSE))}")
+print(f"MSE Teste= {np.sqrt(np.mean(MSE_valid))}")
 
+#
+RMSE = np.zeros(11)
+RMSE_valid = np.zeros(11)
+RMSE[0] = np.sqrt(np.mean(MSE))
+RMSE_valid[0] = np.sqrt(np.mean(MSE_valid))
 
+##
 
 #GD -N > 1
 new_x_train_norm = x_train_norm
-new_x_valid = x_validation
+new_x_valid_norm = x_valid_norm
 
 Y = np.ones(y_train.shape)
 erros = np.ones(y_train.shape)
 for N in range(2,12):
     new_x_train_norm = np.concatenate((new_x_train_norm,x_train_norm[:,:12]**N), axis=1)
-    new_x_valid = np.concatenate((new_x_valid, new_x_valid[:,:12]**N), axis=1)
+    new_x_valid_norm = np.concatenate((new_x_valid_norm, new_x_valid_norm[:,:12]**N), axis=1)
     print(f"N={N} forma de x train = {new_x_train_norm.shape}")
     W = np.random.random(new_x_train_norm.shape[1])
     epoch = 0
     MSE = []
+    MSE_valid = []
     while epoch < num_epochs :
         MSE.append(0)
+        MSE_valid.append(0)
         Y = new_x_train_norm @ W
         erros = y_train_norm - Y
-        MSE[epoch] = (MSE[epoch] + erros**2) / (2*new_x_train_norm.shape[0])
-        W = W + alpha * np.sum(erros.reshape(1,new_x_train_norm.shape[0]) @ 
-                               new_x_train_norm ) / new_x_train_norm.shape[0]
+        MSE[epoch] = np.sum((MSE[epoch] + erros**2) / (2*new_x_train_norm.shape[0]))
+        
+        pred = new_x_valid_norm @ W
+        erro_valid = y_valid_norm - pred
+        MSE_valid[epoch] = np.sum((MSE_valid[epoch] + erro_valid**2) / (2*new_x_valid_norm.shape[0]))
+       
+        W = W + (alpha * np.sum(new_x_train_norm.T @ erros ) / new_x_train_norm.shape[0]) - lambda_ * W # Reg L2
         epoch = epoch + 1
+    
+    RMSE[N-1] = np.sqrt(np.mean(MSE))
+    RMSE_valid[N-1] = np.sqrt(np.mean(MSE_valid))
+    print(f"MSE = {np.mean(MSE)} Para N={N}")
     fig2, ax2 = plt.subplots()
-    ax2.plot(axis_x, np.sqrt(MSE), color='tab:blue', label=f"N={N}")
+    ax2.plot(np.arange(1,num_epochs+1), MSE, color='tab:blue')
+    ax2.plot(np.arange(1,num_epochs+1), MSE_valid, color='tab:red')
     ax2.set_title(f"RMSE de N={N}")
     plt.show()
-    print(f"MSE = {np.sqrt(np.sum(MSE))}")
-    pred = new_x_valid @ W
-    fig, ax = plt.subplots()
-    ax.plot(new_x_valid, pred, color='tab:blue')
-    ax.plot(new_x_valid, y_validation, 'o', color='tab:red')
-    ax.set_title(f"Grafico em N={N}")
-    plt.show()
+
+# Plotando o RMSE
+fig3, ax3 = plt.subplots()
+ax3.plot(np.arange(1,12), RMSE, color='tab:blue')
+ax3.plot(np.arange(1,12), RMSE_valid, color='tab:red')
+ax3.set_title(f"RMSE x Graus")
+ax3.set_ylabel('RMSE')
+ax3.set_xlabel('Grau')
+plt.show()
+
+
     
-        
-        
 
